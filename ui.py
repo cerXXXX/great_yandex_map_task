@@ -7,6 +7,7 @@ import requests
 import os
 import sys
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -50,15 +51,47 @@ class MainWindow(QMainWindow):
         self.map_label.move(0, 80)
         # self.map_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
+        self.submit_button.clicked.connect(self.search_location)
+        self.input_data.returnPressed.connect(self.search_location)
+
+        self.marker = None
         self.api_key = 'f3a0fe3a-b07e-4840-a1da-06f18b2ddf13'
+        self.geocode_api_key = '8013b162-6b42-4997-9691-77b7074026e0'
         self.theme = 'light'
         self.api_server = 'https://static-maps.yandex.ru/1.x/'
         self.map_zoom = 8
         self.delta = 0.1
         self.map_ll = [37.621598, 55.753460]
         self.map_l = 'map'
-        self.refresh_map()
         self.setFocus()
+
+        self.refresh_map()
+
+    def search_location(self):
+        query = self.input_data.text()
+        if not query:
+            return
+
+        geocoder_url = 'https://geocode-maps.yandex.ru/1.x/'
+        geocoder_params = {
+            'apikey': self.geocode_api_key,
+            'geocode': query,
+            'format': 'json'
+        }
+
+        response = requests.get(geocoder_url, params=geocoder_params)
+        if response.status_code == 200:
+            try:
+                results = response.json()
+                pos_str = results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
+                lon, lat = map(float, pos_str.split())
+                self.map_ll = [lon, lat]
+                self.marker = f"{lon},{lat},pm2rdm"  # красная метка
+                self.refresh_map()
+            except (IndexError, KeyError):
+                print("Объект не найден")
+        else:
+            print(response.content)
 
     def change_theme(self):
         if self.theme == 'light':
@@ -97,7 +130,6 @@ class MainWindow(QMainWindow):
 
         self.refresh_map()
 
-
     def refresh_map(self):
         map_params = {
             'll': ','.join(map(str, self.map_ll)),
@@ -106,6 +138,9 @@ class MainWindow(QMainWindow):
             'theme': self.theme,
             'apikey': self.api_key
         }
+        if self.marker:
+            map_params['pt'] = self.marker
+
         response = requests.get(self.api_server, params=map_params)
         if response.status_code == 200:
             pix_map = QPixmap()
