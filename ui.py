@@ -34,6 +34,11 @@ class MainWindow(QMainWindow):
         self.submit_button.move(380, 0)
         self.submit_button.setText('Искать')
 
+        self.reset_button = QPushButton(self)
+        self.reset_button.move(380, 60)
+        self.reset_button.setText('Сброс')
+        self.reset_button.clicked.connect(self.reset_marker)
+
         self.change_theme_button = QPushButton(self)
         self.change_theme_button.move(380, 30)
         self.change_theme_button.setText('Тема')
@@ -56,7 +61,7 @@ class MainWindow(QMainWindow):
 
         self.map_label = ClickableLabel(self)
         self.map_label.resize(600, 500)
-        self.map_label.move(0, 80)
+        self.map_label.move(0, 100)
         self.map_label.clicked.connect(self.setFocus)
 
         self.submit_button.clicked.connect(self.search_location)
@@ -100,6 +105,10 @@ class MainWindow(QMainWindow):
                 print("Объект не найден")
         else:
             print(response.content)
+
+    def reset_marker(self):
+        self.marker = None
+        self.refresh_map()
 
     def change_theme(self):
         if self.theme == 'light':
