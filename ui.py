@@ -2,7 +2,6 @@
 ВНИМАНИЕ! Чтобы работали стрелки влево и вправо нужно кликнуть по карте!
 """
 
-
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
@@ -64,14 +63,20 @@ class MainWindow(QMainWindow):
         self.map_label.move(0, 100)
         self.map_label.clicked.connect(self.setFocus)
 
+        self.address_label = QLabel(self)
+        self.address_label.resize(380, 30)
+        self.address_label.move(0, 570)
+
         self.submit_button.clicked.connect(self.search_location)
         self.input_data.returnPressed.connect(self.search_location)
 
         self.marker = None
+        self.address = None
         self.api_key = 'f3a0fe3a-b07e-4840-a1da-06f18b2ddf13'
         self.geocode_api_key = '8013b162-6b42-4997-9691-77b7074026e0'
         self.theme = 'light'
         self.api_server = 'https://static-maps.yandex.ru/1.x/'
+        self.geocode_api_server = 'https://geocode-maps.yandex.ru/1.x/'
         self.map_zoom = 8
         self.delta = 0.1
         self.map_ll = [37.621598, 55.753460]
@@ -85,14 +90,13 @@ class MainWindow(QMainWindow):
         if not query:
             return
 
-        geocoder_url = 'https://geocode-maps.yandex.ru/1.x/'
         geocoder_params = {
             'apikey': self.geocode_api_key,
             'geocode': query,
             'format': 'json'
         }
 
-        response = requests.get(geocoder_url, params=geocoder_params)
+        response = requests.get(self.geocode_api_server, params=geocoder_params)
         if response.status_code == 200:
             try:
                 results = response.json()
@@ -100,6 +104,11 @@ class MainWindow(QMainWindow):
                 lon, lat = map(float, pos_str.split())
                 self.map_ll = [lon, lat]
                 self.marker = f"{lon},{lat},pm2rdm"
+
+                address = results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['name']
+                self.address = address
+                self.address_label.setText(f"Адрес: {address}")
+
                 self.refresh_map()
             except (IndexError, KeyError):
                 print("Объект не найден")
@@ -108,6 +117,8 @@ class MainWindow(QMainWindow):
 
     def reset_marker(self):
         self.marker = None
+        self.address = None
+        self.address_label.setText("Адрес: ")
         self.refresh_map()
 
     def change_theme(self):
