@@ -1,3 +1,8 @@
+"""
+ВНИМАНИЕ! Чтобы работали стрелки влево и вправо нужно кликнуть по карте!
+"""
+
+
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
@@ -8,6 +13,14 @@ import os
 import sys
 
 
+class ClickableLabel(QLabel):
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -16,12 +29,10 @@ class MainWindow(QMainWindow):
         self.input_data = QLineEdit(self)
         self.input_data.resize(380, 30)
         self.input_data.move(0, 0)
-        # self.input_data.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.submit_button = QPushButton(self)
         self.submit_button.move(380, 0)
         self.submit_button.setText('Искать')
-        # self.submit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.change_theme_button = QPushButton(self)
         self.change_theme_button.move(380, 30)
@@ -29,27 +40,24 @@ class MainWindow(QMainWindow):
         self.change_theme_button.clicked.connect(self.change_theme)
 
         self.scheme_view = QPushButton(self)
-        self.scheme_view.move(380 + 100, 0)
+        self.scheme_view.move(480, 0)
         self.scheme_view.setText('Схема')
         self.scheme_view.clicked.connect(self.set_scheme_view)
-        # self.set_scheme_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.map_view = QPushButton(self)
-        self.map_view.move(380 + 100, 30)
+        self.map_view.move(480, 30)
         self.map_view.setText('Карта')
         self.map_view.clicked.connect(self.set_map_view)
-        # self.set_map_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.hybrid_view = QPushButton(self)
-        self.hybrid_view.move(380 + 100, 60)
+        self.hybrid_view.move(480, 60)
         self.hybrid_view.setText('Гибрид')
         self.hybrid_view.clicked.connect(self.set_hybrid_view)
-        # self.set_hybrid_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-        self.map_label = QLabel(self)
+        self.map_label = ClickableLabel(self)
         self.map_label.resize(600, 500)
         self.map_label.move(0, 80)
-        # self.map_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.map_label.clicked.connect(self.setFocus)
 
         self.submit_button.clicked.connect(self.search_location)
         self.input_data.returnPressed.connect(self.search_location)
@@ -86,7 +94,7 @@ class MainWindow(QMainWindow):
                 pos_str = results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
                 lon, lat = map(float, pos_str.split())
                 self.map_ll = [lon, lat]
-                self.marker = f"{lon},{lat},pm2rdm"  # красная метка
+                self.marker = f"{lon},{lat},pm2rdm"
                 self.refresh_map()
             except (IndexError, KeyError):
                 print("Объект не найден")
