@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self.include_postcode_checkbox = QCheckBox('Включить почтовый индекс', self)
         self.include_postcode_checkbox.move(380, 90)
         self.include_postcode_checkbox.setChecked(False)
+        self.include_postcode_checkbox.stateChanged.connect(self.update_address)
 
         self.submit_button.clicked.connect(self.search_location)
         self.input_data.returnPressed.connect(self.search_location)
@@ -109,12 +110,9 @@ class MainWindow(QMainWindow):
                 self.map_ll = [lon, lat]
                 self.marker = f"{lon},{lat},pm2rdm"
 
-                address = results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['name']
-                if self.include_postcode_checkbox.isChecked():
-                    postcode = self.get_postcode(results)
-                    address = f"{address}, {postcode}"
-                self.address = address
-                self.address_label.setText(f"Адрес: {address}")
+                self.address = results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['name']
+                print(3, results)
+                self.update_address(results)
 
                 self.refresh_map()
             except (IndexError, KeyError):
@@ -122,14 +120,27 @@ class MainWindow(QMainWindow):
         else:
             print(response.content)
 
+    def update_address(self, results=None):
+        try:
+            if self.address:
+                if self.include_postcode_checkbox.isChecked() and results is not int:
+                    postcode = self.get_postcode(results)
+                    self.address_label.setText(f"Адрес: {self.address}, {postcode}")
+                else:
+                    self.address_label.setText(f"Адрес: {self.address}")
+            else:
+                self.address_label.setText("Адрес: ")
+        except Exception as e:
+            print(e)
+
     def get_postcode(self, results):
         try:
             postal_code = \
-                results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['metaDataProperty'][
-                    'GeocoderMetaData']['Address']['postal_code']
+            results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['metaDataProperty'][
+                'GeocoderMetaData']['Address']['postal_code']
             return postal_code
-        except KeyError:
-            return "Почтовый индекс не найден"
+        except Exception as e:
+            print(1, e, results)
 
     def reset_marker(self):
         self.marker = None
@@ -199,3 +210,4 @@ if __name__ == '__main__':
     ex = MainWindow()
     ex.show()
     sys.exit(app.exec())
+
