@@ -58,6 +58,7 @@ class MainWindow(QMainWindow):
         self.map_ll = [37.621598, 55.753460]
         self.map_l = 'map'
         self.refresh_map()
+        self.setFocus()
 
     def change_theme(self):
         if self.theme == 'light':
@@ -79,21 +80,23 @@ class MainWindow(QMainWindow):
         self.refresh_map()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_PageUp and self.map_zoom <= 20:
-            self.map_zoom += 1
-        if event.key() == Qt.Key.Key_PageDown and self.map_zoom > 0:
-            self.map_zoom -= 1
-        print(1)
-        if event.key() == Qt.Key.Key_Left:
-            self.map_ll[0] -= self.delta
-        if event.key() == Qt.Key.Key_Right:
-            self.map_ll[0] += self.delta
-        if event.key() == Qt.Key.Key_Down:
-            self.map_ll[1] -= self.delta
-        if event.key() == Qt.Key.Key_Up:
-            self.map_ll[1] += self.delta
+        if event.key() == Qt.Key.Key_PageUp:
+            if self.map_zoom < 20:
+                self.map_zoom += 1
+        elif event.key() == Qt.Key.Key_PageDown:
+            if self.map_zoom > 0:
+                self.map_zoom -= 1
+        elif event.key() == Qt.Key.Key_Left:
+            self.map_ll[0] = max(-180, self.map_ll[0] - self.delta)
+        elif event.key() == Qt.Key.Key_Right:
+            self.map_ll[0] = min(180, self.map_ll[0] + self.delta)
+        elif event.key() == Qt.Key.Key_Down:
+            self.map_ll[1] = max(-85, self.map_ll[1] - self.delta)
+        elif event.key() == Qt.Key.Key_Up:
+            self.map_ll[1] = min(85, self.map_ll[1] + self.delta)
 
         self.refresh_map()
+
 
     def refresh_map(self):
         map_params = {
