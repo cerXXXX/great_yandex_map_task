@@ -67,6 +67,10 @@ class MainWindow(QMainWindow):
         self.address_label.resize(380, 30)
         self.address_label.move(0, 570)
 
+        self.include_postcode_checkbox = QCheckBox('Включить почтовый индекс', self)
+        self.include_postcode_checkbox.move(380, 90)
+        self.include_postcode_checkbox.setChecked(False)
+
         self.submit_button.clicked.connect(self.search_location)
         self.input_data.returnPressed.connect(self.search_location)
 
@@ -106,6 +110,9 @@ class MainWindow(QMainWindow):
                 self.marker = f"{lon},{lat},pm2rdm"
 
                 address = results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['name']
+                if self.include_postcode_checkbox.isChecked():
+                    postcode = self.get_postcode(results)
+                    address = f"{address}, {postcode}"
                 self.address = address
                 self.address_label.setText(f"Адрес: {address}")
 
@@ -114,6 +121,15 @@ class MainWindow(QMainWindow):
                 print("Объект не найден")
         else:
             print(response.content)
+
+    def get_postcode(self, results):
+        try:
+            postal_code = \
+                results['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['metaDataProperty'][
+                    'GeocoderMetaData']['Address']['postal_code']
+            return postal_code
+        except KeyError:
+            return "Почтовый индекс не найден"
 
     def reset_marker(self):
         self.marker = None
