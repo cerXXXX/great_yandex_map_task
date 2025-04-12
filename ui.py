@@ -3,13 +3,14 @@ from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 import requests
 import sys
+import math
 
 
 class ClickableLabel(QLabel):
-    clicked = pyqtSignal(QPoint)
+    clicked = pyqtSignal(QPoint, Qt.MouseButton)
 
     def mousePressEvent(self, event):
-        self.clicked.emit(event.pos())
+        self.clicked.emit(event.pos(), event.button())
         super().mousePressEvent(event)
 
 
@@ -77,7 +78,17 @@ class MainWindow(QMainWindow):
         self.map_l = 'map'
         self.refresh_map()
 
-    def handle_map_click(self, pos):
+    def haversine(self, lat1, lon1, lat2, lon2):
+        R = 6371000
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        delta_phi = math.radians(lat2 - lat1)
+        delta_lambda = math.radians(lon2 - lon1)
+
+        a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+        return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    def handle_map_click(self, pos, button):
         try:
             map_width = self.map_label.width()
             map_height = self.map_label.height()
@@ -88,75 +99,118 @@ class MainWindow(QMainWindow):
             dx = (pos.x() - map_width / 2) * delta_lon / map_width
             dy = (map_height / 2 - pos.y()) * delta_lat / map_height
 
-            lon = self.map_center[0] + dx
-            lat = self.map_center[1] + dy
+            click_lon = self.map_center[0] + dx
+            click_lat = self.map_center[1] + dy
 
-            self.process_geocoding(lon, lat)
+            print(f"\nКоординаты клика: {click_lon:.6f}, {click_lat:.6f}")
+
+            self.process_geocoding(click_lon, click_lat)
+
+            if button == Qt.MouseButton.RightButton:
+                self.find_organization(click_lon, click_lat)
 
         except Exception as e:
-            self.address_label.setText(f"Ошибка: {str(e)}")
+            print(f"Ошибка: {e}")
 
-    def process_geocoding(self, lon, lat):
-        geocoder_params = {
-            'apikey': self.geocode_api_key,
-            'geocode': f"{lon:.6f},{lat:.6f}",
-            'format': 'json'
-        }
+    def find_organization(self, lon, lat):
         try:
+            print(f"Поиск организаций в радиусе 50 метров...")
+
+            geocoder_params = {
+                'apikey': self.geocode_api_key,
+                'geocode': f"{lon:.6f},{lat:.6f}",
+                'type': 'biz',
+                'format': 'json',
+                'results': 1
+            }
+
             response = requests.get(self.geocode_api_server, params=geocoder_params, timeout=5)
+            print(f"Статус ответа: {response.status_code}; {response.content}")
+
             if response.status_code != 200:
-                self.address_label.setText("Ошибка соединения")
                 return
+
             results = response.json()
             features = results.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
+            print(f"Найдено объектов: {len(features)}")
 
             if not features:
-                self.address_label.setText("Адрес не найден")
-                self.marker = None
-                self.refresh_map()
+                print("Организации не найдены")
                 return
 
             feature = features[0].get('GeoObject', {})
             pos_str = feature.get('Point', {}).get('pos', '')
 
             if not pos_str:
-                raise Exception()
+                print("Нет координат в ответе")
+                return
+
+            org_lon, org_lat = map(float, pos_str.split())
+            distance = self.haversine(lat, lon, org_lat, org_lon)
+            print(f"Расстояние до объекта: {distance:.2f} м")
+
+            if distance <= 50:
+                name = feature.get('name', 'Неизвестная организация')
+                address = feature.get('description', 'Адрес не указан')
+                print("\n=== Найдена организация ===")
+                print(f"Название: {name}")
+                print(f"Адрес: {address}")
+                print(f"Координаты: {org_lon:.6f}, {org_lat:.6f}")
+                print(f"Расстояние от клика: {distance:.2f} метров\n")
+            else:
+                print("Ближайшая организация находится дальше 50 метров")
+
+        except Exception as e:
+            print(f"Ошибка поиска организации: {e}")
+
+    def process_geocoding(self, lon, lat):
+        try:
+            geocoder_params = {
+                'apikey': self.geocode_api_key,
+                'geocode': f"{lon:.6f},{lat:.6f}",
+                'format': 'json'
+            }
+
+            response = requests.get(self.geocode_api_server, params=geocoder_params, timeout=5)
+            if response.status_code != 200: return
+
+            results = response.json()
+            features = results.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
+            if not features: return
+
+            feature = features[0].get('GeoObject', {})
+            pos_str = feature.get('Point', {}).get('pos', '')
+            if not pos_str: return
 
             marker_lon, marker_lat = map(float, pos_str.split())
             self.marker = f"{marker_lon:.6f},{marker_lat:.6f},pm2rdm"
             self.address = feature.get('name', 'Неизвестный адрес')
             self.update_address(results)
             self.refresh_map()
-
         except Exception as e:
-            print(e)
+            print(f"Ошибка: {e}")
 
     def search_location(self):
-        query = self.input_data.text().strip()
-        if not query:
-            return
-        geocoder_params = {
-            'apikey': self.geocode_api_key,
-            'geocode': query,
-            'format': 'json'
-        }
         try:
+            query = self.input_data.text().strip()
+            if not query: return
+
+            geocoder_params = {
+                'apikey': self.geocode_api_key,
+                'geocode': query,
+                'format': 'json'
+            }
+
             response = requests.get(self.geocode_api_server, params=geocoder_params, timeout=5)
-            if response.status_code != 200:
-                self.address_label.setText("Ошибка поиска")
-                return
+            if response.status_code != 200: return
+
             results = response.json()
             features = results.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
-
-            if not features:
-                self.address_label.setText("Объект не найден")
-                return
+            if not features: return
 
             feature = features[0].get('GeoObject', {})
             pos_str = feature.get('Point', {}).get('pos', '')
-
-            if not pos_str:
-                raise ValueError()
+            if not pos_str: return
 
             lon, lat = map(float, pos_str.split())
             self.map_center = [lon, lat]
@@ -164,13 +218,8 @@ class MainWindow(QMainWindow):
             self.address = feature.get('name', 'Неизвестный адрес')
             self.update_address(results)
             self.refresh_map()
-
-        except requests.RequestException:
-            self.address_label.setText("Ошибка сети")
-        except (KeyError, IndexError, ValueError):
-            self.address_label.setText("Ошибка данных")
-        except Exception:
-            self.address_label.setText("Системная ошибка")
+        except Exception as e:
+            print(f"Ошибка: {e}")
 
     def update_address(self, results=None):
         try:
@@ -179,11 +228,10 @@ class MainWindow(QMainWindow):
                 address_data = results.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [{}])[
                     0].get('GeoObject', {}).get('metaDataProperty', {}).get('GeocoderMetaData', {}).get('Address', {})
                 postcode = address_data.get('postal_code', '')
-                if postcode:
-                    text += f", {postcode}"
+                if postcode: text += f", {postcode}"
             self.address_label.setText(text)
-        except Exception:
-            self.address_label.setText("Ошибка формата данных")
+        except Exception as e:
+            print(f"Ошибка: {e}")
 
     def reset_marker(self):
         self.marker = None
@@ -208,40 +256,48 @@ class MainWindow(QMainWindow):
         self.refresh_map()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_PageUp:
-            self.map_zoom = min(20, self.map_zoom + 1)
-        elif event.key() == Qt.Key.Key_PageDown:
-            self.map_zoom = max(1, self.map_zoom - 1)
-        elif event.key() == Qt.Key.Key_Left:
-            self.map_center[0] -= 0.5 * (360 / (2 ** self.map_zoom))
-        elif event.key() == Qt.Key.Key_Right:
-            self.map_center[0] += 0.5 * (360 / (2 ** self.map_zoom))
-        elif event.key() == Qt.Key.Key_Down:
-            self.map_center[1] -= 0.5 * (180 / (2 ** self.map_zoom))
-        elif event.key() == Qt.Key.Key_Up:
-            self.map_center[1] += 0.5 * (180 / (2 ** self.map_zoom))
-        self.map_center[0] = max(-180, min(180, self.map_center[0]))
-        self.map_center[1] = max(-85, min(85, self.map_center[1]))
-        self.refresh_map()
+        try:
+            if event.key() == Qt.Key.Key_PageUp:
+                self.map_zoom = min(20, self.map_zoom + 1)
+            elif event.key() == Qt.Key.Key_PageDown:
+                self.map_zoom = max(1, self.map_zoom - 1)
+            elif event.key() == Qt.Key.Key_Left:
+                self.map_center[0] -= 0.5 * (360 / (2 ** self.map_zoom))
+            elif event.key() == Qt.Key.Key_Right:
+                self.map_center[0] += 0.5 * (360 / (2 ** self.map_zoom))
+            elif event.key() == Qt.Key.Key_Down:
+                self.map_center[1] -= 0.5 * (180 / (2 ** self.map_zoom))
+            elif event.key() == Qt.Key.Key_Up:
+                self.map_center[1] += 0.5 * (180 / (2 ** self.map_zoom))
+
+            self.map_center[0] = max(-180, min(180, self.map_center[0]))
+            self.map_center[1] = max(-85, min(85, self.map_center[1]))
+            self.refresh_map()
+        except Exception as e:
+            print(f"Ошибка: {e}")
 
     def refresh_map(self):
-        map_params = {
-            'll': f"{self.map_center[0]:.6f},{self.map_center[1]:.6f}",
-            'l': self.map_l,
-            'z': self.map_zoom,
-            'theme': self.theme,
-            'size': '600,450',
-            'apikey': self.api_key
-        }
-        if self.marker:
-            map_params['pt'] = self.marker
-        response = requests.get(self.api_server, params=map_params)
-        if response.status_code == 200:
-            pixmap = QPixmap()
-            pixmap.loadFromData(response.content)
-            self.map_label.setPixmap(pixmap)
-        else:
-            print(f"Ошибка: {response.status_code}")
+        try:
+            map_params = {
+                'll': f"{self.map_center[0]:.6f},{self.map_center[1]:.6f}",
+                'l': self.map_l,
+                'z': self.map_zoom,
+                'theme': self.theme,
+                'size': '600,450',
+                'apikey': self.api_key
+            }
+            if self.marker:
+                map_params['pt'] = self.marker
+
+            response = requests.get(self.api_server, params=map_params)
+            if response.status_code == 200:
+                pixmap = QPixmap()
+                pixmap.loadFromData(response.content)
+                self.map_label.setPixmap(pixmap)
+            else:
+                print(f"Ошибка загрузки карты: {response.status_code}")
+        except Exception as e:
+            print(f"Ошибка: {e}")
 
 
 if __name__ == '__main__':
